@@ -882,10 +882,10 @@ public class InlineIndexHelper {
             return 1;
         }
 
-        if (valType != this.type)
+        if (valType != type)
             throw new UnsupportedOperationException("value type doesn't match");
 
-        switch (this.type) {
+        switch (type) {
             case Value.BOOLEAN:
                 PageUtils.putByte(pageAddr, off, (byte)valType);
                 PageUtils.putByte(pageAddr, off + 1, (byte)(val.getBoolean() ? 1 : 0));
