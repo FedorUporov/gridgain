@@ -31,6 +31,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -78,6 +79,7 @@ import org.apache.ignite.internal.processors.cache.CacheGroupContext;
 import org.apache.ignite.internal.processors.cache.CacheObjectImpl;
 import org.apache.ignite.internal.processors.cache.GridCacheContext;
 import org.apache.ignite.internal.processors.cache.GridCacheEntryEx;
+import org.apache.ignite.internal.processors.cache.GridCacheFuture;
 import org.apache.ignite.internal.processors.cache.GridCacheMvccCandidate;
 import org.apache.ignite.internal.processors.cache.GridCacheOperation;
 import org.apache.ignite.internal.processors.cache.KeyCacheObjectImpl;
@@ -85,6 +87,7 @@ import org.apache.ignite.internal.processors.cache.distributed.dht.GridDhtTxFini
 import org.apache.ignite.internal.processors.cache.distributed.near.GridNearLockResponse;
 import org.apache.ignite.internal.processors.cache.distributed.near.GridNearTxFinishRequest;
 import org.apache.ignite.internal.processors.cache.distributed.near.GridNearTxLocal;
+import org.apache.ignite.internal.processors.cache.distributed.near.GridNearTxPrepareFutureAdapter;
 import org.apache.ignite.internal.processors.cache.persistence.GridCacheDatabaseSharedManager;
 import org.apache.ignite.internal.processors.cache.transactions.IgniteInternalTx;
 import org.apache.ignite.internal.processors.cache.transactions.IgniteTxEntry;
@@ -104,6 +107,7 @@ import org.apache.ignite.internal.visor.tx.VisorTxTaskResult;
 import org.apache.ignite.lang.IgniteBiPredicate;
 import org.apache.ignite.lang.IgniteInClosure;
 import org.apache.ignite.lang.IgnitePredicate;
+import org.apache.ignite.lang.IgniteUuid;
 import org.apache.ignite.plugin.extensions.communication.Message;
 import org.apache.ignite.testframework.GridTestUtils;
 import org.apache.ignite.testframework.junits.common.GridCommonAbstractTest;
@@ -212,6 +216,50 @@ public class GridCommandHandlerTest extends GridCommonAbstractTest {
         log.info("----------------------------------------");
         if (testOut != null)
             System.out.println(testOut.toString());
+    }
+
+    /**
+     * Checks if all non-system txs and non-system mvcc futures are finished.
+     */
+    protected void checkUserFutures() {
+        for (Ignite ignite : G.allGrids()) {
+            IgniteEx ig = (IgniteEx)ignite;
+
+            final Collection<GridCacheFuture<?>> futs = ig.context().cache().context().mvcc().activeFutures();
+
+            boolean hasFutures = false;
+
+            for (GridCacheFuture<?> fut : futs) {
+                if (!fut.isDone()) {
+                    if (fut instanceof GridNearTxPrepareFutureAdapter
+                        && ((GridNearTxPrepareFutureAdapter) fut).tx().system())
+                        continue;
+
+                    log.error("Expecting no active future [node=" + ig.localNode().id() + ", fut=" + fut + ']');
+
+                    hasFutures = true;
+                }
+            }
+
+            if (hasFutures)
+                fail("Some mvcc futures are not finished");
+
+            Collection<IgniteInternalTx> txs = ig.context().cache().context().tm().activeTransactions()
+                .stream()
+                .filter(tx -> !tx.system())
+                .collect(Collectors.toSet());
+
+            for (IgniteInternalTx tx : txs)
+                log.error("Expecting no active transaction [node=" + ig.localNode().id() + ", tx=" + tx + ']');
+
+            if (!txs.isEmpty())
+                fail("Some transaction are not finished");
+        }
+    }
+
+    /** */
+    protected void checkTransactionsCount(int expected, int actual) {
+        assertEquals(expected, actual);
     }
 
     /**
@@ -1050,10 +1098,19 @@ public class GridCommandHandlerTest extends GridCommonAbstractTest {
 
             VisorTxTaskResult res = map.get(node);
 
-            for (VisorTxInfo info : res.getInfos())
-                assertEquals(tx0.xid(), info.getXid());
+            boolean tranKilled = false;
 
-            assertEquals(1, map.size());
+            for (VisorTxInfo info : res.getInfos()) {
+                if (Objects.equals(tx0.xid(), info.getXid())) {
+                    tranKilled = true;
+
+                    break;
+                }
+            }
+
+            assertTrue(tranKilled);
+
+            checkTransactionsCount(1, map.size());
         }, "--tx", "--kill");
 
         tx0.finishFuture().get();
@@ -1066,7 +1123,7 @@ public class GridCommandHandlerTest extends GridCommonAbstractTest {
 
         nearFinFut.get();
 
-        checkFutures();
+        checkUserFutures();
     }
 
     /**
@@ -1557,27 +1614,27 @@ public class GridCommandHandlerTest extends GridCommonAbstractTest {
 
         testCacheIdleVerifyMultipleCacheFilterOptionsCommon(
             true,
-            "idle_verify check has finished, found 100 partitions",
+            "idle_verify check has finished, found",
             "idle_verify task was executed with the following args: --cache-filter SYSTEM --exclude-caches wrong.* ",
             "--cache", "idle_verify", "--dump", "--cache-filter", "SYSTEM", "--exclude-caches", "wrong.*"
         );
         testCacheIdleVerifyMultipleCacheFilterOptionsCommon(
             true,
-            "idle_verify check has finished, found 196 partitions",
+            "idle_verify check has finished, found 96 partitions",
             null,
-            "--cache", "idle_verify", "--dump", ".*", "--exclude-caches", "wrong.*"
+            "--cache", "idle_verify", "--dump", "--exclude-caches", "wrong.*"
         );
         testCacheIdleVerifyMultipleCacheFilterOptionsCommon(
             true,
             "idle_verify check has finished, found 32 partitions",
             null,
-            "--cache", "idle_verify", "--dump", "shared.*", "--cache-filter", "ALL"
+            "--cache", "idle_verify", "--dump", "shared.*"
         );
         testCacheIdleVerifyMultipleCacheFilterOptionsCommon(
             true,
             "idle_verify check has finished, found 160 partitions",
             null,
-            "--cache", "idle_verify", "--dump", "shared.*,wrong.*", "--cache-filter", "ALL"
+            "--cache", "idle_verify", "--dump", "shared.*,wrong.*"
         );
         testCacheIdleVerifyMultipleCacheFilterOptionsCommon(
             true,
@@ -1587,9 +1644,9 @@ public class GridCommandHandlerTest extends GridCommonAbstractTest {
         );
         testCacheIdleVerifyMultipleCacheFilterOptionsCommon(
             true,
-            "There are no caches matching given filter options.",
+            "idle_verify check has finished, found 160 partitions",
             null,
-            "--cache", "idle_verify", "--dump", "shared.*,wrong.*", "--cache-filter", "SYSTEM"
+            "--cache", "idle_verify", "--dump", "shared.*,wrong.*"
         );
         testCacheIdleVerifyMultipleCacheFilterOptionsCommon(
             true,
@@ -1607,13 +1664,13 @@ public class GridCommandHandlerTest extends GridCommonAbstractTest {
             true,
             "idle_verify check has finished, no conflicts have been found.",
             null,
-            "--cache", "idle_verify", ".*", "--exclude-caches", "wrong-.*", "--cache-filter", "DEFAULT"
+            "--cache", "idle_verify", "--exclude-caches", "wrong-.*"
         );
         testCacheIdleVerifyMultipleCacheFilterOptionsCommon(
             true,
             "idle_verify check has finished, no conflicts have been found.",
             null,
-            "--cache", "idle_verify", "--dump", ".*", "--cache-filter", "PERSISTENT"
+            "--cache", "idle_verify", "--dump", "--cache-filter", "PERSISTENT"
         );
     }
 
@@ -1722,7 +1779,7 @@ public class GridCommandHandlerTest extends GridCommonAbstractTest {
 
         injectTestSystemOut();
 
-        corruptingAndCheckDefaultCache(ignite, "ALL");
+        corruptingAndCheckDefaultCache(ignite, "USER");
     }
 
     /**
@@ -2547,7 +2604,7 @@ public class GridCommandHandlerTest extends GridCommonAbstractTest {
      * @param validateClo Validate clo.
      * @param args Args.
      */
-    private void validate(CommandHandler h, IgniteInClosure<Map<ClusterNode, VisorTxTaskResult>> validateClo,
+    protected void validate(CommandHandler h, IgniteInClosure<Map<ClusterNode, VisorTxTaskResult>> validateClo,
         String... args) {
         assertEquals(EXIT_CODE_OK, execute(h, args));
 
@@ -2647,7 +2704,7 @@ public class GridCommandHandlerTest extends GridCommonAbstractTest {
      * method call and unlock latch release. Commit of the first transaction will be asserted to fail in such case.
      * @return Future to be completed after finish of all started transactions.
      */
-    private IgniteInternalFuture<?> startTransactions(
+    protected IgniteInternalFuture<?> startTransactions(
         CountDownLatch lockLatch,
         CountDownLatch unlockLatch,
         boolean topChangeBeforeUnlock
