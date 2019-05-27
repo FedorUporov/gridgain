@@ -20,6 +20,7 @@
 #include <ignite/test_utils.h>
 
 using namespace ignite;
+using namespace ignite::common;
 using namespace ignite::common::concurrent;
 
 using namespace boost::unit_test;
@@ -92,6 +93,63 @@ BOOST_AUTO_TEST_CASE(IgniteImplProjection)
     BOOST_REQUIRE(impl->GetProjection().IsValid());
 }
 
+BOOST_AUTO_TEST_CASE(IgniteImplGetNodes)
+{
+    impl::IgniteImpl* impl = impl::IgniteImpl::GetFromProxy(node);
+
+    BOOST_REQUIRE(impl != 0);
+
+    SharedPointer<impl::cluster::ClusterGroupImpl> clusterGroup = impl->GetProjection();
+
+    BOOST_REQUIRE(clusterGroup.IsValid());
+
+    DynamicSizeArray<SharedPointer<impl::cluster::ClusterNodeImpl> > nodes = clusterGroup.Get()->GetNodes();
+
+    BOOST_REQUIRE(nodes.GetSize() == 1);
+    BOOST_REQUIRE(nodes.Front().IsValid());
+}
+
+BOOST_AUTO_TEST_CASE(IgniteImplGetCluster)
+{
+    impl::IgniteImpl* impl = impl::IgniteImpl::GetFromProxy(node);
+
+    BOOST_REQUIRE(impl != 0);
+
+    SharedPointer<impl::cluster::IgniteClusterImpl> igniteCluster = impl->GetCluster();
+
+    BOOST_REQUIRE(igniteCluster.IsValid());
+}
+
+BOOST_AUTO_TEST_CASE(IgniteImplForAttribute)
+{
+    impl::IgniteImpl* impl = impl::IgniteImpl::GetFromProxy(node);
+
+    BOOST_REQUIRE(impl != 0);
+
+    SharedPointer<impl::cluster::ClusterGroupImpl> clusterGroup = impl->GetProjection();
+
+    BOOST_REQUIRE(clusterGroup.IsValid());
+
+    IgniteError err;
+
+    BOOST_REQUIRE(clusterGroup.Get()->ForAttribute("my_attr", "value1").IsValid());
+}
+
+BOOST_AUTO_TEST_CASE(IgniteImplForDataNodes)
+{
+    impl::IgniteImpl* impl = impl::IgniteImpl::GetFromProxy(node);
+
+    BOOST_REQUIRE(impl != 0);
+
+    SharedPointer<impl::cluster::ClusterGroupImpl> clusterGroup = impl->GetProjection();
+
+    BOOST_REQUIRE(clusterGroup.IsValid());
+
+    IgniteError err;
+
+    BOOST_REQUIRE(clusterGroup.Get()->ForDataNodes("default").IsValid());
+}
+
 BOOST_AUTO_TEST_CASE(IgniteImplForServers)
 {
     impl::IgniteImpl* impl = impl::IgniteImpl::GetFromProxy(node);
@@ -105,6 +163,21 @@ BOOST_AUTO_TEST_CASE(IgniteImplForServers)
     IgniteError err;
 
     BOOST_REQUIRE(clusterGroup.Get()->ForServers().IsValid());
+}
+
+BOOST_AUTO_TEST_CASE(IgniteImplForCpp)
+{
+    impl::IgniteImpl* impl = impl::IgniteImpl::GetFromProxy(node);
+
+    BOOST_REQUIRE(impl != 0);
+
+    SharedPointer<impl::cluster::ClusterGroupImpl> clusterGroup = impl->GetProjection();
+
+    BOOST_REQUIRE(clusterGroup.IsValid());
+
+    IgniteError err;
+
+    BOOST_REQUIRE(clusterGroup.Get()->ForCpp().IsValid());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

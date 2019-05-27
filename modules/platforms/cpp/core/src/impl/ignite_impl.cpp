@@ -57,11 +57,21 @@ namespace ignite
             return env.Get()->GetBinding();
         }
 
+        IgniteImpl::SP_IgniteClusterImpl IgniteImpl::GetCluster()
+        {
+            return IgniteImpl::SP_IgniteClusterImpl(new cluster::IgniteClusterImpl(this->GetProjection()));
+        }
+
         IgniteImpl::SP_ComputeImpl IgniteImpl::GetCompute()
         {
             cluster::SP_ClusterGroupImpl serversCluster = prjImpl.Get().Get()->ForServers();
 
             return serversCluster.Get()->GetCompute();
+        }
+
+        IgniteImpl::SP_ComputeImpl IgniteImpl::GetCompute(cluster::SP_ClusterGroupImpl grp)
+        {
+            return grp.Get()->GetCompute();
         }
 
         transactions::TransactionsImpl* IgniteImpl::InternalGetTransactions()

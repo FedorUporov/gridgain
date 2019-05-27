@@ -26,6 +26,7 @@
 #include <ignite/impl/cache/cache_impl.h>
 #include <ignite/impl/transactions/transactions_impl.h>
 #include <ignite/impl/cluster/cluster_group_impl.h>
+#include <ignite/impl/cluster/ignite_cluster_impl.h>
 #include <ignite/impl/compute/compute_impl.h>
 
 namespace ignite
@@ -54,6 +55,7 @@ namespace ignite
         {
             typedef common::concurrent::SharedPointer<IgniteEnvironment> SP_IgniteEnvironment;
             typedef common::concurrent::SharedPointer<transactions::TransactionsImpl> SP_TransactionsImpl;
+            typedef common::concurrent::SharedPointer<cluster::IgniteClusterImpl> SP_IgniteClusterImpl;
             typedef common::concurrent::SharedPointer<compute::ComputeImpl> SP_ComputeImpl;
             typedef common::concurrent::SharedPointer<IgniteBindingImpl> SP_IgniteBindingImpl;
         public:
@@ -170,11 +172,25 @@ namespace ignite
             }
 
             /**
+             * Get cluster.
+             *
+             * @return IgniteClusterImpl instance.
+             */
+            SP_IgniteClusterImpl GetCluster();
+
+            /**
              * Get compute.
              *
              * @return ComputeImpl instance.
              */
             SP_ComputeImpl GetCompute();
+
+            /**
+             * Get compute from cluster group.
+             *
+             * @return ComputeImpl instance.
+             */
+            SP_ComputeImpl GetCompute(cluster::SP_ClusterGroupImpl grp);
 
             /**
              * Check if the Ignite grid is active.
